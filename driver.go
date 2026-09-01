@@ -2,14 +2,13 @@ package aanderaa_motus_wave_sensor_5729
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
+	"github.com/samber/oops"
 	"go.bug.st/serial"
 )
 
@@ -23,30 +22,30 @@ type Driver struct {
 
 func NewDriver(serialPort serial.Port) *Driver {
 	return &Driver{
-		serialPort: serialPort,
+		serialPort: NewSerialPortWrapper(serialPort),
 	}
 }
 
 func (driver *Driver) Wake() error {
-	return driver.wake(100 * time.Millisecond)
+	return oops.Wrap(driver.wake(100 * time.Millisecond))
 }
 
 func (driver *Driver) wake(wait time.Duration) error {
 	err := driver.serialPort.ResetInputBuffer()
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	err = driver.send("")
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	err = driver.serialPort.Drain()
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	err = driver.serialPort.SetReadTimeout(wait)
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	defer func(serialPort serial.Port, t time.Duration) {
 		_ = serialPort.SetReadTimeout(t)
@@ -55,11 +54,7 @@ func (driver *Driver) wake(wait time.Duration) error {
 	for {
 		n, err := driver.serialPort.Read(byteBuffer[:])
 		if err != nil {
-			if errors.Is(err, syscall.EINTR) {
-				continue
-			} else {
-				return err
-			}
+			return oops.Wrap(err)
 		}
 		if (n == 0) || (byteBuffer[0] == '!') {
 			break
@@ -69,29 +64,29 @@ func (driver *Driver) wake(wait time.Duration) error {
 }
 
 func (driver *Driver) SetPasskey(level int) error {
-	return driver.setIntProperty("Passkey", level)
+	return oops.Wrap(driver.setIntProperty("Passkey", level))
 }
 
 func (driver *Driver) SetMode(mode string) error {
-	return driver.setStringProperty("Mode", mode)
+	return oops.Wrap(driver.setStringProperty("Mode", mode))
 }
 
 func (driver *Driver) SetEnablePolledMode(enable bool) error {
-	return driver.setBoolProperty("Enable Polled Mode", enable)
+	return oops.Wrap(driver.setBoolProperty("Enable Polled Mode", enable))
 }
 
 func (driver *Driver) SetEnableText(enable bool) error {
-	return driver.setBoolProperty("Enable Text", enable)
+	return oops.Wrap(driver.setBoolProperty("Enable Text", enable))
 }
 
 func (driver *Driver) SetEnableDecimalformat(enable bool) error {
-	return driver.setBoolProperty("Enable Decimalformat", enable)
+	return oops.Wrap(driver.setBoolProperty("Enable Decimalformat", enable))
 }
 
 func (driver *Driver) Start() error {
 	_, err := driver.request("Start")
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -99,7 +94,7 @@ func (driver *Driver) Start() error {
 func (driver *Driver) Stop() error {
 	_, err := driver.request("Stop")
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -107,7 +102,7 @@ func (driver *Driver) Stop() error {
 func (driver *Driver) Save() error {
 	_, err := driver.request("Save")
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -115,7 +110,7 @@ func (driver *Driver) Save() error {
 func (driver *Driver) Reset() error {
 	_, err := driver.request("Reset")
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -123,20 +118,20 @@ func (driver *Driver) Reset() error {
 func (driver *Driver) DoSample() (*Measurement, error) {
 	lines, err := driver.request("Do Sample")
 	if err != nil {
-		return nil, err
+		return nil, oops.Wrap(err)
 	}
 
 	if len(lines) == 0 {
-		return nil, fmt.Errorf("no response")
+		return nil, oops.Wrap(fmt.Errorf("no response"))
 	}
 
 	line := lines[0]
 	parts := strings.Split(line, "\t")
 	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid response")
+		return nil, oops.Wrap(fmt.Errorf("invalid response"))
 	}
 	if parts[0] != "MEASUREMENT" {
-		return nil, fmt.Errorf("invalid response")
+		return nil, oops.Wrap(fmt.Errorf("invalid response"))
 	}
 
 	parts = parts[3:]
@@ -172,7 +167,7 @@ func (driver *Driver) DoSample() (*Measurement, error) {
 func (driver *Driver) setStringProperty(name string, value string) error {
 	_, err := driver.request(fmt.Sprintf("Set %s(%s)", name, value))
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -180,7 +175,7 @@ func (driver *Driver) setStringProperty(name string, value string) error {
 func (driver *Driver) setIntProperty(name string, value int) error {
 	_, err := driver.request(fmt.Sprintf("Set %s(%d)", name, value))
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -194,7 +189,7 @@ func (driver *Driver) setBoolProperty(name string, value bool) error {
 	}
 	_, err := driver.request(fmt.Sprintf("Set %s(%s)", name, valueString))
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -202,15 +197,15 @@ func (driver *Driver) setBoolProperty(name string, value bool) error {
 func (driver *Driver) request(req string) ([]string, error) {
 	err := driver.serialPort.ResetInputBuffer()
 	if err != nil {
-		return nil, err
+		return nil, oops.Wrap(err)
 	}
 	err = driver.send(req)
 	if err != nil {
-		return nil, err
+		return nil, oops.Wrap(err)
 	}
 	err = driver.serialPort.Drain()
 	if err != nil {
-		return nil, err
+		return nil, oops.Wrap(err)
 	}
 	return driver.readResponse()
 }
@@ -221,7 +216,7 @@ func (driver *Driver) send(text string) error {
 	)
 	_, err := driver.serialPort.Write([]byte(text + lineTerminator))
 	if err != nil {
-		return err
+		return oops.Wrap(err)
 	}
 	return nil
 }
@@ -241,15 +236,13 @@ func (driver *Driver) readResponse() ([]string, error) {
 				parts := strings.SplitN(line, "\t", 3)
 				if len(parts) == 3 {
 					if (parts[0] == "*") && (parts[1] == "ERROR") {
-						return lines, fmt.Errorf("%s", parts[2])
+						return lines, oops.Wrap(fmt.Errorf("%s", parts[2]))
 					}
 				}
 			}
 			lines = append(lines, line)
 		}
-		if !errors.Is(scanner.Err(), syscall.EINTR) {
-			return lines, scanner.Err()
-		}
+		return lines, oops.Wrap(scanner.Err())
 	}
 }
 
