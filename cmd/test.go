@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -199,78 +197,21 @@ func (tester *Tester) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (tester *Tester) DoSample(ctx context.Context) (*Measurement, error) {
+func (tester *Tester) DoSample(ctx context.Context) (*aanderaa_motus_wave_sensor_5729.Measurement, error) {
 	err := tester.driver.Wake()
 	if err != nil {
 		return nil, err
 	}
 
-	lines, err := tester.driver.DoSample()
+	m, err := tester.driver.DoSample()
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("Do Sample",
-		slog.Any("lines", lines),
-	)
 
 	err = tester.wait(ctx, 100*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("no response")
-	}
-
-	line := lines[0]
-	parts := strings.Split(line, "\t")
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid response")
-	}
-	if parts[0] != "MEASUREMENT" {
-		return nil, fmt.Errorf("invalid response")
-	}
-
-	parts = parts[3:]
-	var quantities []Quantity
-	for i := 0; i < len(parts); i += 2 {
-		name := parts[i]
-		if strings.HasPrefix(name, "*") {
-			continue
-		}
-		p := strings.LastIndex(name, "[")
-		if (p < 0) || !strings.HasSuffix(name, "]") {
-			continue
-		}
-		units := name[p+1 : len(name)-1]
-		name = name[:p]
-		valueString := parts[i+1]
-		value, err := strconv.ParseFloat(valueString, 64)
-		if err != nil {
-			continue
-		}
-		quantities = append(quantities, Quantity{
-			Name:  name,
-			Value: value,
-			Units: units,
-		})
-	}
-
-	return &Measurement{
-		Quantities: quantities,
-	}, nil
-}
-
-type Measurement struct {
-	Quantities []Quantity
-}
-
-type Quantity struct {
-	Name  string
-	Value float64
-	Units string
-}
-
-func (q Quantity) String() string {
-	return fmt.Sprintf("%s: %ef %s", q.Name, q.Value, q.Units)
+	return m, nil
 }

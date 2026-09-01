@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -119,12 +120,53 @@ func (driver *Driver) Reset() error {
 	return nil
 }
 
-func (driver *Driver) DoSample() ([]string, error) {
+func (driver *Driver) DoSample() (*Measurement, error) {
 	lines, err := driver.request("Do Sample")
 	if err != nil {
 		return nil, err
 	}
-	return lines, nil
+
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("no response")
+	}
+
+	line := lines[0]
+	parts := strings.Split(line, "\t")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid response")
+	}
+	if parts[0] != "MEASUREMENT" {
+		return nil, fmt.Errorf("invalid response")
+	}
+
+	parts = parts[3:]
+	var quantities []Quantity
+	for i := 0; i < len(parts); i += 2 {
+		name := parts[i]
+		if strings.HasPrefix(name, "*") {
+			continue
+		}
+		p := strings.LastIndex(name, "[")
+		if (p < 0) || !strings.HasSuffix(name, "]") {
+			continue
+		}
+		units := name[p+1 : len(name)-1]
+		name = name[:p]
+		valueString := parts[i+1]
+		value, err := strconv.ParseFloat(valueString, 64)
+		if err != nil {
+			continue
+		}
+		quantities = append(quantities, Quantity{
+			Name:  name,
+			Value: value,
+			Units: units,
+		})
+	}
+
+	return &Measurement{
+		Quantities: quantities,
+	}, nil
 }
 
 func (driver *Driver) setStringProperty(name string, value string) error {
@@ -220,4 +262,18 @@ func stripXonXoff(line string) string {
 		}
 	}
 	return string(output)
+}
+
+type Measurement struct {
+	Quantities []Quantity
+}
+
+type Quantity struct {
+	Name  string
+	Value float64
+	Units string
+}
+
+func (q Quantity) String() string {
+	return fmt.Sprintf("%s: %ef %s", q.Name, q.Value, q.Units)
 }
