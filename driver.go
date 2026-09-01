@@ -2,9 +2,11 @@ package aanderaa_motus_wave_sensor_5729
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.bug.st/serial"
@@ -52,7 +54,11 @@ func (driver *Driver) wake(wait time.Duration) error {
 	for {
 		n, err := driver.serialPort.Read(byteBuffer[:])
 		if err != nil {
-			return err
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			} else {
+				return err
+			}
 		}
 		if (n == 0) || (byteBuffer[0] == '!') {
 			break
@@ -181,24 +187,28 @@ func (driver *Driver) send(text string) error {
 func (driver *Driver) readResponse() ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(driver.serialPort)
-	for scanner.Scan() {
-		line := stripXonXoff(scanner.Text())
-		slog.Debug("<<<",
-			slog.String("text", line),
-		)
-		if line == "#" {
-			return lines, nil
-		} else if strings.HasPrefix(line, "*") {
-			parts := strings.SplitN(line, "\t", 3)
-			if len(parts) == 3 {
-				if (parts[0] == "*") && (parts[1] == "ERROR") {
-					return lines, fmt.Errorf("%s", parts[2])
+	for {
+		for scanner.Scan() {
+			line := stripXonXoff(scanner.Text())
+			slog.Debug("<<<",
+				slog.String("text", line),
+			)
+			if line == "#" {
+				return lines, nil
+			} else if strings.HasPrefix(line, "*") {
+				parts := strings.SplitN(line, "\t", 3)
+				if len(parts) == 3 {
+					if (parts[0] == "*") && (parts[1] == "ERROR") {
+						return lines, fmt.Errorf("%s", parts[2])
+					}
 				}
 			}
+			lines = append(lines, line)
 		}
-		lines = append(lines, line)
+		if !errors.Is(scanner.Err(), syscall.EINTR) {
+			return lines, scanner.Err()
+		}
 	}
-	return lines, scanner.Err()
 }
 
 func stripXonXoff(line string) string {
