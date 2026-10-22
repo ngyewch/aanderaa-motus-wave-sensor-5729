@@ -5,8 +5,8 @@ go 1.25.0
 require (
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/phsym/console-slog v0.3.1
-	github.com/samber/oops v1.23.1
-	github.com/urfave/cli/v3 v3.11.0
+	github.com/samber/oops v1.23.2
+	github.com/urfave/cli/v3 v3.14.0
 	go.bug.st/serial v1.8.0
 )
 
