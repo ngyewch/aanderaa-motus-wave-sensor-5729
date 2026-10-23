@@ -8,17 +8,17 @@ import (
 	"go.bug.st/serial"
 )
 
-type SerialPortWrapper struct {
+type serialPortWrapper struct {
 	serialPort serial.Port
 }
 
-func NewSerialPortWrapper(serialPort serial.Port) *SerialPortWrapper {
-	return &SerialPortWrapper{
+func newSerialPortWrapper(serialPort serial.Port) *serialPortWrapper {
+	return &serialPortWrapper{
 		serialPort: serialPort,
 	}
 }
 
-func (port *SerialPortWrapper) SetMode(mode *serial.Mode) error {
+func (port *serialPortWrapper) SetMode(mode *serial.Mode) error {
 	for {
 		err := port.serialPort.SetMode(mode)
 		if !errors.Is(err, syscall.EINTR) {
@@ -27,7 +27,7 @@ func (port *SerialPortWrapper) SetMode(mode *serial.Mode) error {
 	}
 }
 
-func (port *SerialPortWrapper) Read(b []byte) (int, error) {
+func (port *serialPortWrapper) Read(b []byte) (int, error) {
 	for {
 		n, err := port.serialPort.Read(b)
 		if !errors.Is(err, syscall.EINTR) {
@@ -36,7 +36,7 @@ func (port *SerialPortWrapper) Read(b []byte) (int, error) {
 	}
 }
 
-func (port *SerialPortWrapper) Write(b []byte) (int, error) {
+func (port *serialPortWrapper) Write(b []byte) (int, error) {
 	for {
 		n, err := port.serialPort.Write(b)
 		if !errors.Is(err, syscall.EINTR) {
@@ -45,7 +45,7 @@ func (port *SerialPortWrapper) Write(b []byte) (int, error) {
 	}
 }
 
-func (port *SerialPortWrapper) Drain() error {
+func (port *serialPortWrapper) Drain() error {
 	for {
 		err := port.serialPort.Drain()
 		if !errors.Is(err, syscall.EINTR) {
@@ -54,7 +54,7 @@ func (port *SerialPortWrapper) Drain() error {
 	}
 }
 
-func (port *SerialPortWrapper) ResetInputBuffer() error {
+func (port *serialPortWrapper) ResetInputBuffer() error {
 	for {
 		err := port.serialPort.ResetInputBuffer()
 		if !errors.Is(err, syscall.EINTR) {
@@ -63,7 +63,7 @@ func (port *SerialPortWrapper) ResetInputBuffer() error {
 	}
 }
 
-func (port *SerialPortWrapper) ResetOutputBuffer() error {
+func (port *serialPortWrapper) ResetOutputBuffer() error {
 	for {
 		err := port.serialPort.ResetOutputBuffer()
 		if !errors.Is(err, syscall.EINTR) {
@@ -72,7 +72,7 @@ func (port *SerialPortWrapper) ResetOutputBuffer() error {
 	}
 }
 
-func (port *SerialPortWrapper) SetDTR(dtr bool) error {
+func (port *serialPortWrapper) SetDTR(dtr bool) error {
 	for {
 		err := port.serialPort.SetDTR(dtr)
 		if !errors.Is(err, syscall.EINTR) {
@@ -81,7 +81,7 @@ func (port *SerialPortWrapper) SetDTR(dtr bool) error {
 	}
 }
 
-func (port *SerialPortWrapper) SetRTS(rts bool) error {
+func (port *serialPortWrapper) SetRTS(rts bool) error {
 	for {
 		err := port.serialPort.SetRTS(rts)
 		if !errors.Is(err, syscall.EINTR) {
@@ -90,7 +90,7 @@ func (port *SerialPortWrapper) SetRTS(rts bool) error {
 	}
 }
 
-func (port *SerialPortWrapper) GetModemStatusBits() (*serial.ModemStatusBits, error) {
+func (port *serialPortWrapper) GetModemStatusBits() (*serial.ModemStatusBits, error) {
 	for {
 		bits, err := port.serialPort.GetModemStatusBits()
 		if !errors.Is(err, syscall.EINTR) {
@@ -99,7 +99,7 @@ func (port *SerialPortWrapper) GetModemStatusBits() (*serial.ModemStatusBits, er
 	}
 }
 
-func (port *SerialPortWrapper) SetReadTimeout(t time.Duration) error {
+func (port *serialPortWrapper) SetReadTimeout(t time.Duration) error {
 	for {
 		err := port.serialPort.SetReadTimeout(t)
 		if !errors.Is(err, syscall.EINTR) {
@@ -108,11 +108,11 @@ func (port *SerialPortWrapper) SetReadTimeout(t time.Duration) error {
 	}
 }
 
-func (port *SerialPortWrapper) Close() error {
+func (port *serialPortWrapper) Close() error {
 	return port.serialPort.Close()
 }
 
-func (port *SerialPortWrapper) Break(duration time.Duration) error {
+func (port *serialPortWrapper) Break(duration time.Duration) error {
 	for {
 		err := port.serialPort.Break(duration)
 		if !errors.Is(err, syscall.EINTR) {

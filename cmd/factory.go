@@ -14,7 +14,6 @@ func newSerialPort(ctx context.Context, cmd *cli.Command) (serial.Port, error) {
 	dataBits := cmd.Int(dataBitsFlag.Name)
 	parityString := cmd.String(parityFlag.Name)
 	stopBitsString := cmd.String(stopBitsFlag.Name)
-	readTimeout := cmd.Duration(readTimeoutFlag.Name)
 
 	parity, err := func(s string) (serial.Parity, error) {
 		switch s {
@@ -60,11 +59,6 @@ func newSerialPort(ctx context.Context, cmd *cli.Command) (serial.Port, error) {
 	}
 
 	port, err := serial.Open(serialPort, &mode)
-	if err != nil {
-		return nil, err
-	}
-
-	err = port.SetReadTimeout(readTimeout)
 	if err != nil {
 		return nil, err
 	}

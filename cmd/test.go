@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	aanderaa_motus_wave_sensor_5729 "github.com/ngyewch/aanderaa-motus-wave-sensor-5729"
@@ -12,63 +12,30 @@ import (
 )
 
 func doTest(ctx context.Context, cmd *cli.Command) error {
-	serialPort, err := newSerialPort(ctx, cmd)
+	interval := cmd.Duration(intervalFlag.Name)
+
+	tester := Tester{
+		Interval: interval,
+		SerialPortSupplier: func() (serial.Port, error) {
+			return newSerialPort(ctx, cmd)
+		},
+	}
+	err := tester.Run(ctx)
 	if err != nil {
 		return err
 	}
-	defer func(serialPort serial.Port) {
-		_ = serialPort.Close()
-	}(serialPort)
 
-	interval := cmd.Duration(intervalFlag.Name)
+	return nil
+}
 
-	driver := aanderaa_motus_wave_sensor_5729.NewDriver(serialPort)
+type Tester struct {
+	Interval           time.Duration
+	SerialPortSupplier func() (serial.Port, error)
+}
 
-	tester := NewTester(driver, interval)
-
-	iterationCount := 0
+func (tester Tester) Run(ctx context.Context) error {
 	for {
-		err = func() error {
-			iterationCount++
-			slog.Info("iteration",
-				slog.Int("count", iterationCount),
-			)
-
-			err = tester.Setup(ctx)
-			if err != nil {
-				return err
-			}
-
-			t0 := time.Now()
-			for {
-				m, err := tester.DoSample(ctx)
-				if err != nil {
-					return err
-				}
-
-				if len(m.Quantities) == 0 {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-time.After(interval):
-						continue
-					}
-				}
-
-				duration := time.Since(t0)
-				var quantityStrings []string
-				for _, quantity := range m.Quantities {
-					quantityStrings = append(quantityStrings, quantity.String())
-				}
-				slog.Info("measurement",
-					slog.Duration("duration", duration),
-					slog.String("quantities", strings.Join(quantityStrings, " / ")),
-				)
-				break
-			}
-
-			return nil
-		}()
+		err := tester.doRun(ctx)
 		if err != nil {
 			slog.Error("error",
 				slog.Any("err", err),
@@ -77,141 +44,64 @@ func doTest(ctx context.Context, cmd *cli.Command) error {
 	}
 }
 
-type Tester struct {
-	driver   *aanderaa_motus_wave_sensor_5729.Driver
-	interval time.Duration
+func (tester Tester) doRun(ctx context.Context) error {
+	serialPort, err := tester.SerialPortSupplier()
+	if err != nil {
+		return err
+	}
+	defer func(serialPort serial.Port) {
+		_ = serialPort.Close()
+	}(serialPort)
+
+	driver := aanderaa_motus_wave_sensor_5729.NewDriver(serialPort)
+	client := aanderaa_motus_wave_sensor_5729.NewClient(driver, nil)
+
+	err = doSetup(ctx, client, 1*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	for {
+		m, err := doSample(ctx, client, 5*time.Second)
+		if err != nil {
+			return err
+		}
+
+		if len(m.Quantities) > 0 {
+			var logAttrs []any
+			for _, quantity := range m.Quantities {
+				logAttrs = append(logAttrs, slog.Float64(fmt.Sprintf("%s[%s]", quantity.Name, quantity.Units), quantity.Value))
+			}
+			slog.Info("measurement", logAttrs...)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(tester.Interval):
+		}
+	}
 }
 
-func NewTester(driver *aanderaa_motus_wave_sensor_5729.Driver, interval time.Duration) *Tester {
-	return &Tester{
-		driver:   driver,
-		interval: interval,
-	}
-}
+func doSetup(ctx context.Context, client *aanderaa_motus_wave_sensor_5729.Client, timeout time.Duration) error {
+	slog.Info("setting up...")
 
-func (tester *Tester) wait(ctx context.Context, duration time.Duration) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(1 * time.Second):
-	}
-	return nil
-}
+	setupContext, setupCancel := context.WithTimeout(ctx, timeout)
+	defer setupCancel()
 
-func (tester *Tester) Setup(ctx context.Context) error {
-	err := tester.wait(ctx, 1*time.Second)
+	err := client.Setup(setupContext)
 	if err != nil {
 		return err
 	}
 
-	err = tester.driver.Wake()
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.Stop()
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.SetPasskey(1000)
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.SetMode("Smart Sensor Terminal")
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.SetEnableText(true)
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.SetEnablePolledMode(true)
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.SetEnableDecimalformat(false)
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.Save()
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return err
-	}
-
-	err = tester.driver.Reset()
-	if err != nil {
-		return err
-	}
-
-	err = tester.wait(ctx, 1*time.Second)
-	if err != nil {
-		return err
-	}
+	slog.Info("setup completed")
 
 	return nil
 }
 
-func (tester *Tester) DoSample(ctx context.Context) (*aanderaa_motus_wave_sensor_5729.Measurement, error) {
-	err := tester.driver.Wake()
-	if err != nil {
-		return nil, err
-	}
+func doSample(ctx context.Context, client *aanderaa_motus_wave_sensor_5729.Client, timeout time.Duration) (*aanderaa_motus_wave_sensor_5729.Measurement, error) {
+	sampleContext, sampleCancel := context.WithTimeout(ctx, timeout)
+	defer sampleCancel()
 
-	m, err := tester.driver.DoSample()
-	if err != nil {
-		return nil, err
-	}
-
-	err = tester.wait(ctx, 100*time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-
-	return m, nil
+	return client.DoSample(sampleContext)
 }

@@ -2,6 +2,7 @@ package aanderaa_motus_wave_sensor_5729
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -22,7 +23,7 @@ type Driver struct {
 
 func NewDriver(serialPort serial.Port) *Driver {
 	return &Driver{
-		serialPort: NewSerialPortWrapper(serialPort),
+		serialPort: newSerialPortWrapper(serialPort),
 	}
 }
 
@@ -47,9 +48,6 @@ func (driver *Driver) wake(wait time.Duration) error {
 	if err != nil {
 		return oops.Wrap(err)
 	}
-	defer func(serialPort serial.Port, t time.Duration) {
-		_ = serialPort.SetReadTimeout(t)
-	}(driver.serialPort, 5*time.Second)
 	var byteBuffer [1]byte
 	for {
 		n, err := driver.serialPort.Read(byteBuffer[:])
@@ -63,60 +61,60 @@ func (driver *Driver) wake(wait time.Duration) error {
 	return nil
 }
 
-func (driver *Driver) SetPasskey(level int) error {
-	return oops.Wrap(driver.setIntProperty("Passkey", level))
+func (driver *Driver) SetPasskey(ctx context.Context, level int) error {
+	return oops.Wrap(driver.setIntProperty(ctx, "Passkey", level))
 }
 
-func (driver *Driver) SetMode(mode string) error {
-	return oops.Wrap(driver.setStringProperty("Mode", mode))
+func (driver *Driver) SetMode(ctx context.Context, mode string) error {
+	return oops.Wrap(driver.setStringProperty(ctx, "Mode", mode))
 }
 
-func (driver *Driver) SetEnablePolledMode(enable bool) error {
-	return oops.Wrap(driver.setBoolProperty("Enable Polled Mode", enable))
+func (driver *Driver) SetEnablePolledMode(ctx context.Context, enable bool) error {
+	return oops.Wrap(driver.setBoolProperty(ctx, "Enable Polled Mode", enable))
 }
 
-func (driver *Driver) SetEnableText(enable bool) error {
-	return oops.Wrap(driver.setBoolProperty("Enable Text", enable))
+func (driver *Driver) SetEnableText(ctx context.Context, enable bool) error {
+	return oops.Wrap(driver.setBoolProperty(ctx, "Enable Text", enable))
 }
 
-func (driver *Driver) SetEnableDecimalformat(enable bool) error {
-	return oops.Wrap(driver.setBoolProperty("Enable Decimalformat", enable))
+func (driver *Driver) SetEnableDecimalformat(ctx context.Context, enable bool) error {
+	return oops.Wrap(driver.setBoolProperty(ctx, "Enable Decimalformat", enable))
 }
 
-func (driver *Driver) Start() error {
-	_, err := driver.request("Start")
+func (driver *Driver) Start(ctx context.Context) error {
+	_, err := driver.request(ctx, "Start")
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) Stop() error {
-	_, err := driver.request("Stop")
+func (driver *Driver) Stop(ctx context.Context) error {
+	_, err := driver.request(ctx, "Stop")
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) Save() error {
-	_, err := driver.request("Save")
+func (driver *Driver) Save(ctx context.Context) error {
+	_, err := driver.request(ctx, "Save")
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) Reset() error {
-	_, err := driver.request("Reset")
+func (driver *Driver) Reset(ctx context.Context) error {
+	_, err := driver.request(ctx, "Reset")
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) DoSample() (*Measurement, error) {
-	lines, err := driver.request("Do Sample")
+func (driver *Driver) DoSample(ctx context.Context) (*Measurement, error) {
+	lines, err := driver.request(ctx, "Do Sample")
 	if err != nil {
 		return nil, oops.Wrap(err)
 	}
@@ -164,37 +162,37 @@ func (driver *Driver) DoSample() (*Measurement, error) {
 	}, nil
 }
 
-func (driver *Driver) setStringProperty(name string, value string) error {
-	_, err := driver.request(fmt.Sprintf("Set %s(%s)", name, value))
+func (driver *Driver) setStringProperty(ctx context.Context, name string, value string) error {
+	_, err := driver.request(ctx, fmt.Sprintf("Set %s(%s)", name, value))
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) setIntProperty(name string, value int) error {
-	_, err := driver.request(fmt.Sprintf("Set %s(%d)", name, value))
+func (driver *Driver) setIntProperty(ctx context.Context, name string, value int) error {
+	_, err := driver.request(ctx, fmt.Sprintf("Set %s(%d)", name, value))
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) setBoolProperty(name string, value bool) error {
+func (driver *Driver) setBoolProperty(ctx context.Context, name string, value bool) error {
 	var valueString string
 	if value {
 		valueString = "Yes"
 	} else {
 		valueString = "No"
 	}
-	_, err := driver.request(fmt.Sprintf("Set %s(%s)", name, valueString))
+	_, err := driver.request(ctx, fmt.Sprintf("Set %s(%s)", name, valueString))
 	if err != nil {
 		return oops.Wrap(err)
 	}
 	return nil
 }
 
-func (driver *Driver) request(req string) ([]string, error) {
+func (driver *Driver) request(ctx context.Context, req string) ([]string, error) {
 	err := driver.serialPort.ResetInputBuffer()
 	if err != nil {
 		return nil, oops.Wrap(err)
@@ -207,7 +205,7 @@ func (driver *Driver) request(req string) ([]string, error) {
 	if err != nil {
 		return nil, oops.Wrap(err)
 	}
-	return driver.readResponse()
+	return driver.readResponse(ctx)
 }
 
 func (driver *Driver) send(text string) error {
@@ -221,9 +219,22 @@ func (driver *Driver) send(text string) error {
 	return nil
 }
 
-func (driver *Driver) readResponse() ([]string, error) {
+func (driver *Driver) readResponse(ctx context.Context) ([]string, error) {
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		err := driver.serialPort.SetReadTimeout(time.Until(deadline))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err := driver.serialPort.SetReadTimeout(serial.NoTimeout)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var lines []string
-	scanner := bufio.NewScanner(driver.serialPort)
+	r := newTimeoutReader(driver.serialPort)
+	scanner := bufio.NewScanner(r)
 	for {
 		for scanner.Scan() {
 			line := stripXonXoff(scanner.Text())

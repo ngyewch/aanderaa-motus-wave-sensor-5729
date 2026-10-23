@@ -59,12 +59,6 @@ var (
 			}
 		},
 	}
-	readTimeoutFlag = &cli.DurationFlag{
-		Name:    "read-timeout",
-		Usage:   "read timeout",
-		Value:   5 * time.Second,
-		Sources: cli.EnvVars("READ_TIMEOUT"),
-	}
 	intervalFlag = &cli.DurationFlag{
 		Name:    "interval",
 		Usage:   "interval",
@@ -88,7 +82,6 @@ var (
 					dataBitsFlag,
 					parityFlag,
 					stopBitsFlag,
-					readTimeoutFlag,
 					intervalFlag,
 				},
 			},
