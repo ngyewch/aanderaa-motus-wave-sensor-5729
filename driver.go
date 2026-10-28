@@ -269,13 +269,13 @@ func stripXonXoff(line string) string {
 }
 
 type Measurement struct {
-	Quantities []Quantity
+	Quantities []Quantity `json:"quantities"`
 }
 
 type Quantity struct {
-	Name  string
-	Value float64
-	Units string
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+	Units string  `json:"units"`
 }
 
 func (q Quantity) String() string {
